@@ -16,6 +16,29 @@ async function main() {
     const contractAddress = await contract.getAddress()
 
     console.log(`PetAdoption deployed to ${contractAddress}`)
+
+    saveContractFiles(contract)
+}
+
+function saveContractFiles(contract) {
+    const contractDir = path.join(__dirname, "..", "frontend", "src", "contracts")
+
+    if(!fs.existsSync(contractDir)) {
+        fs.mkdirSync(contractDir)
+    }
+
+    fs.writeFileSync(
+        path.join(contractDir, `contract-address-${hre.network.name}.json`),
+        JSON.stringify({PetAdoption: contract.target}, null, 2)
+    )
+
+    const PetAdoptionArtifact = hre.artifacts.readArtifactSync("PetAdoption")
+
+    fs.writeFileSync(
+        path.join(contractDir, "PetAdoption.json"),
+        JSON.stringify(PetAdoptionArtifact, null, 2)
+    )
+
 }
 
 main().catch(error => {

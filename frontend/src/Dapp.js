@@ -5,11 +5,22 @@ import { TxError } from "./components/TxError";
 import { WalletNotDetected } from "./components/WalletNotDetected";
 import { ConnectWallet } from "./components/ConnectWallet";
 
+import { ethers } from "ethers"
+import contractAdress from "./contracts/contract-address-localhost.json"
+import PetAdoptionArtifact from "./contracts/PetAdoption.json"
+import { TxInfo } from "./components/TxInfo";
+
 const HARDHAT_NETWORK_ID = Number(31337)
 
 function Dapp() {
   const [pets, setPets] = useState([])
+  const [adoptedPets, setAdoptedPets] = useState([])
+  const [ownedPets, setOwnedPets] = useState([])
   const [selectedAddress, setAddress] = useState(undefined)
+  const [contract, setContract] = useState(undefined)
+  const [txError, setTxError] = useState(undefined)
+  const [txinfo, setTxInfo] = useState(undefined)
+  const [view, setView] = useState("home")
 
   useEffect(() => {
     async function fetchPets() {
@@ -26,16 +37,88 @@ function Dapp() {
       const [address] = await window.ethereum.request({method: "eth_requestAccounts"})
 
       await checkNetwork()
-      setAddress(address)
+      initiliazeDapp(address)
 
       window.ethereum.on("accountsChanged", ([newAddress]) => {
         if( newAddress === undefined ) {
+          setAdoptedPets([])
+          setAddress([])
+          setOwnedPets([])
+          setContract(undefined)
+          setTxError(undefined)
+          setTxInfo(undefined)
+          setView("home")
+
           return
         }
-        setAddress(newAddress)
+        
+        initiliazeDapp(newAddress)
       })
     } catch(e) {
       console.log(e.message);
+    }
+  }
+
+  async function initiliazeDapp(address) {
+    setAddress(address)
+    const contract = await initContract();
+
+    getAdoptedPets(contract)
+  }
+
+  async function initContract() {
+    const provider = new ethers.BrowserProvider(window.ethereum)
+    const contract = new ethers.Contract(
+      contractAdress.PetAdoption,
+      PetAdoptionArtifact.abi,
+      await provider.getSigner(0)
+    )
+
+    setContract(contract)
+    return contract
+  }
+
+  async function getAdoptedPets(contract) {
+    try {
+      const adoptedPets = await contract.getAllAdoptedPets()
+      const ownedPets = await contract.getAllAdoptedPetsByOwner()
+
+      if(adoptedPets.length > 0) {
+        setAdoptedPets(adoptedPets.map(petIdx => Number(petIdx)))   // convert big number to number
+      } else {
+        setAdoptedPets([])
+      }
+
+      if(ownedPets.length > 0) {
+        setOwnedPets(ownedPets.map(petIdx => Number(petIdx)))
+      } else {
+        setOwnedPets([])
+      }
+
+    } catch(e) {
+      console.log(e.message)
+    }
+  }
+
+  async function adoptPet(id) {
+    try {
+      const tx = await contract.adoptPet(id)
+      setTxInfo(tx.hash)
+      const receipt = await tx.wait()
+
+      await new Promise((res) => setTimeout(res, 2000))
+
+      if (receipt.status === 0) {
+        throw new Error("Transaction Failed!")
+      }
+
+      setAdoptedPets([...adoptedPets, id])
+      setOwnedPets([...ownedPets, id])
+    } catch(e) {
+      setTxError(e?.reason)
+      console.log(e.reason)
+    } finally {
+      setTxInfo(undefined)
     }
   }
 
@@ -50,7 +133,7 @@ function Dapp() {
 
   async function checkNetwork() {
 
-    if(window.ethereum.networkVersion !== HARDHAT_NETWORK_ID.toString()) {
+    if(window.ethereum.net_version !== HARDHAT_NETWORK_ID.toString()) {
       alert("Switching to Hardhat")
       return switchNetwork()
     }
@@ -68,14 +151,48 @@ function Dapp() {
 
   return (
     <div className="container">
-      <TxError />
+      { txinfo &&
+        <TxInfo
+          message={txinfo}
+        />
+      }
+      { txError &&
+        <TxError 
+          dismiss={() => setTxError(undefined)}
+          message={txError}
+        />
+      }
       <br />
-      <Navbar address={selectedAddress}/>
+      <Navbar 
+        setView={setView}
+        address={selectedAddress}
+      />
       <div className="items">
-        { pets.map(pet =>
-          <PetItems key={pet.id} pet={pet}/>
-        )}
-      </div>
+      {
+        view === "home" ?
+          pets.map(pet =>
+            <PetItems 
+              key={pet.id} 
+              pet={pet}
+              inProgress={!!txinfo}
+              disabled={adoptedPets.includes(pet.id)}
+              adoptPet={() => adoptPet(pet.id)}
+            />
+          ) :
+          pets
+            .filter(pet => ownedPets.includes(pet.id))
+            .map(pet =>
+              <PetItems 
+                key={pet.id} 
+                pet={pet}
+                inProgress={!!txinfo}
+                disabled={ownedPets.includes(pet.id)}
+                adoptPet={() => adoptPet(pet.id)}
+              />
+          )
+      }
+      </div> 
+      
     </div>
   );
 }
