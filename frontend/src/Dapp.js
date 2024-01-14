@@ -6,11 +6,12 @@ import { WalletNotDetected } from "./components/WalletNotDetected";
 import { ConnectWallet } from "./components/ConnectWallet";
 
 import { ethers } from "ethers"
-import contractAdress from "./contracts/contract-address-localhost.json"
+import { contractAddress } from "./address"
 import PetAdoptionArtifact from "./contracts/PetAdoption.json"
 import { TxInfo } from "./components/TxInfo";
 
-const HARDHAT_NETWORK_ID = Number(31337)
+const HARDHAT_NETWORK_ID = Number(process.env.REACT_APP_NETWORK_ID);
+console.log(process.env.REACT_APP_NETWORK_ID)
 
 function Dapp() {
   const [pets, setPets] = useState([])
@@ -69,7 +70,7 @@ function Dapp() {
   async function initContract() {
     const provider = new ethers.BrowserProvider(window.ethereum)
     const contract = new ethers.Contract(
-      contractAdress.PetAdoption,
+      contractAddress.PetAdoption,
       PetAdoptionArtifact.abi,
       await provider.getSigner(0)
     )
@@ -106,8 +107,6 @@ function Dapp() {
       setTxInfo(tx.hash)
       const receipt = await tx.wait()
 
-      await new Promise((res) => setTimeout(res, 2000))
-
       if (receipt.status === 0) {
         throw new Error("Transaction Failed!")
       }
@@ -134,7 +133,7 @@ function Dapp() {
   async function checkNetwork() {
 
     if(window.ethereum.net_version !== HARDHAT_NETWORK_ID.toString()) {
-      alert("Switching to Hardhat")
+      alert("Switching network")
       return switchNetwork()
     }
 
